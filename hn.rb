@@ -2,22 +2,7 @@ require 'rest-client'
 require 'nokogiri'
 require 'singleton'
 require 'sqlite3'
-
-def run
-  # scrapes front page, gives index, link name
-  # asks for index to access page
-  # user selects a story to access
-  # creates story object
-  # reads readers from story object
-  # hit B to go back to main page -> runs run method
-end
-
-def front_page
-  # scrape front page for story_id, story_name
-  # store this crap in an array
-  # puts each line of array
-end
-
+require 'launchy'
 
 class HN < SQLite3::Database
   include Singleton
@@ -30,50 +15,69 @@ class HN < SQLite3::Database
   end
 end
 
-
-def front_page
-  request = "http://news.ycombinator.com"
-  response = RestClient.get(request)
-  parsed_html = Nokogiri::HTML(response)
+def run
+  page = Page.new
+  page.render_page
+  puts "Select a story you want to see!"
+  story_choice = gets.chomp.to_i
+  page.launch_story(story_choice)
 end
 
+class Page
 
-def comment_links
-  link_array = []
-  array = front_page.css("td.subtext > a")
-  array.each do |link|
-    link_array << link.attr('href')
+  attr_reader :story_name, :story_url, :story_id, :points, :user_name
+
+  def initialize
+    @story_name = []
+    @story_url = []
+    @story_id = []
+    @points = []
+    @user_name = []
+
+    scrape
   end
-  link_array.select! {|url| url =~ /item\S*/}
-end
 
-def url_builder
-  comment_links.map! do |link|
-    "http://news.ycombinator.com/#{link}"
-  end
-end
-
-def scrape
-
-    full_link = "http://news.ycombinator.com/item?id=5104964"
-
-    response = RestClient.get(full_link)
+  def scrape
+    request = "http://news.ycombinator.com"
+    response = RestClient.get(request)
     parsed_html = Nokogiri::HTML(response)
 
-    story_id = full_link[-7..-1]
-    puts story_id
-    story = parsed_html.css("td.title > a")
-    story_link = story.attr('href')
-    story_name = story.text
-    puts story_name
-    puts story_link
-    username = parsed_html.css("td.subtext > a")[0].text
-    puts username
-    story_score = parsed_html.css("span#score_#{story_id}").text.split[0].to_i
-    puts story_score
+    parsed_html.css("td.title > a").each do |story|
+      @story_name << story.text
+    end
+    parsed_html.css("td.title > a").each do |url|
+      @story_url << url.attr('href')
+    end
+    parsed_html.css("td.subtext > a").each do |story_id|
+      @story_id << story_id.attr('href')
+      p @story_id
+    #  @story_id.select! {|url| url =~ /item\S*/}
+    #  @story_id.map! {|id| id[-7..-1]}
+    end
+    # parsed_html.css("td.subtext > a").each do |user_name|
+    #   @user_name << user_name.attr('href')
+    #   @user_name.select! {|user| user =~ /user\S*/}
+    #   @user_name.map! {|user| user[]}
+    # end
+    @story_url.pop      # to get rid of the "news2" link text at bottom of page
+    @story_name.pop     # to get rid of the "More" button text at bottom of page
+    @story_id.pop
+  end
 
-    store(story_id, story_name, story_link, username, story_score)
+  def render_page
+    @story_name.each_with_index do |story_name, index|
+      puts "#{index + 1}. #{story_name}"
+    end
+  end
+
+  def launch_story(story_choice)
+    story_choice -= 1
+    Launchy.open(@story_url[story_choice])
+    Story.new(@story_id[story_choice])
+  end
+
 end
+
 
 class Story
 
